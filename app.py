@@ -1,170 +1,309 @@
+"""
+CodeAlpha AI Internship - Task 2: FAQ Chatbot
+
+Pipeline:
+  1. FAQ dataset (several question variants per answer)
+  2. NLTK preprocessing (lowercase, clean, tokenize, stopwords, lemmatize)
+  3. TF-IDF vectorization + cosine similarity to find the closest FAQ
+  4. Streamlit chat UI
+
+Run with:  streamlit run app.py
+"""
+
 import re
+
 import nltk
+import streamlit as st
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import streamlit as st
 
-# --- NLTK SETUP & DOWNLOADS ---
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('wordnet')
-try:
-  nltk.download('punkt_tab')
-except:
-  pass
+# Minimum cosine similarity needed to accept a match.
+SIMILARITY_THRESHOLD = 0.25
 
-# --- FAQ DATASET (Including Greetings) ---
-faqs = [
+FALLBACK_ANSWER = (
+    "I'm sorry, I couldn't quite understand that. Could you rephrase your "
+    "question? You can also reach our support team at support@example.com."
+)
+
+# --------------------------------------------------------------------------
+# FAQ DATASET
+# Each FAQ has several question variants so matching is more robust.
+# --------------------------------------------------------------------------
+FAQS = [
     {
-        "question": "hello hi hey",
+        "questions": ["hello", "hi", "hey", "good morning", "good evening"],
         "answer": (
-            "Hello! Welcome to our support. How can I help you with our"
-            " products or policies today?"
+            "Hello! Welcome to our support. How can I help you with our "
+            "products or policies today?"
         ),
     },
     {
-        "question": "how are you",
+        "questions": ["how are you", "how are you doing", "how is it going"],
         "answer": (
-            "I'm just a virtual assistant, but I'm doing great and ready to"
-            " help you! What can I assist you with?"
+            "I'm just a virtual assistant, but I'm doing great and ready to "
+            "help you! What can I assist you with?"
         ),
     },
     {
-        "question": "what is your name",
+        "questions": ["what is your name", "who are you", "are you a bot"],
         "answer": (
-            "I am your automated customer support assistant, here to answer your"
-            " FAQs!"
+            "I am your automated customer support assistant, here to answer "
+            "your FAQs!"
         ),
     },
     {
-        "question": "What is your return policy?",
+        "questions": [
+            "What is your return policy?",
+            "How can I return an item?",
+            "Can I get a refund?",
+            "I want to return my product",
+        ],
         "answer": (
-            "You can return any unused item within 30 days of purchase for a"
-            " full refund with the original receipt."
+            "You can return any unused item within 30 days of purchase for a "
+            "full refund with the original receipt."
         ),
     },
     {
-        "question": "How can I track my order?",
+        "questions": [
+            "How can I track my order?",
+            "Where is my order?",
+            "Track my package",
+            "Order tracking link",
+        ],
         "answer": (
-            "Once your order ships, we will send you a confirmation email"
-            " containing your tracking link and carrier details."
+            "Once your order ships, we will send you a confirmation email "
+            "containing your tracking link and carrier details."
         ),
     },
     {
-        "question": "What are your shipping times?",
+        "questions": [
+            "What are your shipping times?",
+            "How long does delivery take?",
+            "When will my order arrive?",
+            "How fast is shipping?",
+        ],
         "answer": (
-            "Standard shipping typically takes 3-5 business days, while"
-            " expedited shipping takes 1-2 business days."
+            "Standard shipping typically takes 3-5 business days, while "
+            "expedited shipping takes 1-2 business days."
         ),
     },
     {
-        "question": "Do you offer international shipping?",
+        "questions": [
+            "Do you offer international shipping?",
+            "Do you ship to other countries?",
+            "Can you deliver abroad?",
+        ],
         "answer": (
-            "Yes, we ship to over 50 countries worldwide. Shipping fees and"
-            " delivery estimates are calculated at checkout."
+            "Yes, we ship to over 50 countries worldwide. Shipping fees and "
+            "delivery estimates are calculated at checkout."
         ),
     },
     {
-        "question": "How do I reset my password?",
+        "questions": [
+            "How do I reset my password?",
+            "I forgot my password",
+            "Can't log in to my account",
+            "Change my password",
+        ],
         "answer": (
-            "Click on 'Forgot Password' on the login page, enter your"
-            " registered email, and follow the instructions sent to your inbox."
+            "Click on 'Forgot Password' on the login page, enter your "
+            "registered email, and follow the instructions sent to your inbox."
         ),
     },
     {
-        "question": "How can I contact customer support?",
+        "questions": [
+            "How can I contact customer support?",
+            "I need to talk to a human",
+            "What is your support email?",
+            "Customer service contact",
+        ],
         "answer": (
-            "You can reach our support team 24/7 via live chat on our website"
-            " or by emailing support@example.com."
+            "You can reach our support team 24/7 via live chat on our website "
+            "or by emailing support@example.com."
         ),
     },
 ]
 
 
-# --- TEXT PREPROCESSING FUNCTION ---
+# --------------------------------------------------------------------------
+# NLTK SETUP (cached, runs once, never crashes the app if offline)
+# --------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def setup_nltk():
+    """Download required NLTK data only if missing. Returns a status dict."""
+    resources = {
+        "punkt": "tokenizers/punkt",
+        "punkt_tab": "tokenizers/punkt_tab",
+        "stopwords": "corpora/stopwords",
+        "wordnet": "corpora/wordnet",
+    }
+    status = {}
+    for name, path in resources.items():
+        try:
+            nltk.data.find(path)
+            status[name] = True
+        except LookupError:
+            try:
+                status[name] = bool(nltk.download(name, quiet=True))
+            except Exception:
+                status[name] = False
+    return status
+
+
+@st.cache_resource(show_spinner=False)
+def get_nlp_tools():
+    """Build stopword set and lemmatizer once."""
+    setup_nltk()
+    try:
+        stop_words = set(stopwords.words("english"))
+    except LookupError:
+        stop_words = set()
+    return stop_words, WordNetLemmatizer()
+
+
+def tokenize(text):
+    """Tokenize with NLTK; fall back to whitespace split if data is missing."""
+    try:
+        return nltk.word_tokenize(text)
+    except LookupError:
+        return text.split()
+
+
+def lemmatize(lemmatizer, token):
+    try:
+        return lemmatizer.lemmatize(token)
+    except LookupError:
+        return token
+
+
+# --------------------------------------------------------------------------
+# TEXT PREPROCESSING
+# --------------------------------------------------------------------------
 def preprocess_text(text):
-  text = text.lower()
-  text = re.sub(r'[^a-zA-Z\s]', '', text)
-  tokens = nltk.word_tokenize(text)
-  lemmatizer = WordNetLemmatizer()
-  stop_words = set(stopwords.words('english'))
-  cleaned_tokens = [
-      lemmatizer.lemmatize(token)
-      for token in tokens
-      if token not in stop_words
-  ]
-  return ' '.join(cleaned_tokens)
+    """
+    Lowercase -> remove punctuation/digits -> tokenize -> remove stopwords
+    -> lemmatize.
+
+    If removing stopwords would leave nothing (e.g. "how are you"), the
+    stopwords are kept so the text still has a usable representation.
+    """
+    stop_words, lemmatizer = get_nlp_tools()
+
+    text = re.sub(r"[^a-z\s]", " ", text.lower())
+    tokens = tokenize(text)
+
+    filtered = [t for t in tokens if t not in stop_words]
+    if not filtered:  # all words were stopwords -> keep them
+        filtered = tokens
+
+    return " ".join(lemmatize(lemmatizer, t) for t in filtered)
 
 
-# --- VECTORIZATION & SIMILARITY ENGINE ---
-processed_faq_questions = [preprocess_text(faq['question']) for faq in faqs]
+# --------------------------------------------------------------------------
+# VECTORIZATION & SIMILARITY ENGINE
+# --------------------------------------------------------------------------
+@st.cache_resource(show_spinner=False)
+def build_engine():
+    """Flatten FAQ variants, preprocess them and fit the TF-IDF vectorizer."""
+    variant_texts = []
+    variant_to_faq = []  # maps each variant to its FAQ index
+    for faq_idx, faq in enumerate(FAQS):
+        for question in faq["questions"]:
+            variant_texts.append(preprocess_text(question))
+            variant_to_faq.append(faq_idx)
 
-vectorizer = TfidfVectorizer()
-faq_vectors = vectorizer.fit_transform(processed_faq_questions)
+    vectorizer = TfidfVectorizer(ngram_range=(1, 2))
+    matrix = vectorizer.fit_transform(variant_texts)
+    return vectorizer, matrix, variant_to_faq
 
 
-def get_best_answer(user_query, threshold=0.05):  # Threshold lowered to 0.05
-  processed_query = preprocess_text(user_query)
-  query_vector = vectorizer.transform([processed_query])
-  similarities = cosine_similarity(query_vector, faq_vectors).flatten()
+def get_best_answer(user_query, threshold=SIMILARITY_THRESHOLD):
+    """Return the answer of the most similar FAQ, or a fallback message."""
+    if not user_query.strip():
+        return FALLBACK_ANSWER
 
-  best_match_idx = similarities.argmax()
-  best_score = similarities[best_match_idx]
+    vectorizer, matrix, variant_to_faq = build_engine()
+    processed_query = preprocess_text(user_query)
+    if not processed_query:
+        return FALLBACK_ANSWER
 
-  if best_score < threshold:
-    return (
-        "I'm sorry, I couldn't quite understand that. You can reach our"
-        ' support team at support@example.com for further assistance!'
+    query_vector = vectorizer.transform([processed_query])
+    similarities = cosine_similarity(query_vector, matrix).flatten()
+
+    best_idx = int(similarities.argmax())
+    if similarities[best_idx] < threshold:
+        return FALLBACK_ANSWER
+
+    return FAQS[variant_to_faq[best_idx]]["answer"]
+
+
+# --------------------------------------------------------------------------
+# STREAMLIT CHAT UI
+# --------------------------------------------------------------------------
+def main():
+    st.set_page_config(
+        page_title="FAQ Assistant", page_icon="💬", layout="centered"
     )
 
-  return faqs[best_match_idx]['answer']
+    st.markdown(
+        """
+        <style>
+        .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
+            flex-direction: row-reverse;
+            text-align: right;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.title("💬 Customer Support FAQ Bot")
+    st.write(
+        "Ask me anything about our return policy, shipping times, account "
+        "help, and more!"
+    )
+
+    with st.sidebar:
+        st.header("About")
+        st.write(
+            "FAQ chatbot built with NLTK preprocessing, TF-IDF and cosine "
+            "similarity."
+        )
+        if st.button("Clear chat"):
+            st.session_state.pop("messages", None)
+            st.rerun()
+
+    if "messages" not in st.session_state:
+        st.session_state.messages = [
+            {
+                "role": "assistant",
+                "content": (
+                    "Hello! How can I help you today? Try asking about our "
+                    "return policy or shipping times."
+                ),
+            }
+        ]
+
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
+
+    user_input = st.chat_input("Type your question here...")
+    if user_input:
+        st.session_state.messages.append({"role": "user", "content": user_input})
+        with st.chat_message("user"):
+            st.markdown(user_input)
+
+        bot_response = get_best_answer(user_input)
+
+        st.session_state.messages.append(
+            {"role": "assistant", "content": bot_response}
+        )
+        with st.chat_message("assistant"):
+            st.markdown(bot_response)
 
 
-# --- STREAMLIT CHAT UI ---
-st.set_page_config(page_title="FAQ Assistant", page_icon="💬", layout="centered")
-
-st.markdown(
-    """
-    <style>
-    .stChatMessage[data-testid="stChatMessage"]:nth-child(odd) {
-        flex-direction: row-reverse;
-        text-align: right;
-    }
-    </style>
-""",
-    unsafe_allow_html=True,
-)
-
-st.title("💬 Customer Support FAQ Bot")
-st.write(
-    "Ask me anything about our return policy, shipping times, account help, and"
-    " more!"
-)
-
-if 'messages' not in st.session_state:
-  st.session_state.messages = [{
-      'role': 'assistant',
-      'content': (
-          'Hello! How can I help you today? Try asking about our return policy'
-          ' or shipping times.'
-      ),
-  }]
-
-for message in st.session_state.messages:
-  with st.chat_message(message['role']):
-    st.markdown(message['content'])
-
-if user_input := st.chat_input('Type your question here...'):
-  st.session_state.messages.append({'role': 'user', 'content': user_input})
-  with st.chat_message('user'):
-    st.markdown(user_input)
-
-  bot_response = get_best_answer(user_input)
-
-  st.session_state.messages.append(
-      {'role': 'assistant', 'content': bot_response}
-  )
-  with st.chat_message('assistant'):
-    st.markdown(bot_response)
+if __name__ == "__main__":
+    main()

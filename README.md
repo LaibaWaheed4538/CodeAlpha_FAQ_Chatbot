@@ -12,10 +12,14 @@ An FAQ chatbot built for **CodeAlpha AI Internship – Task 2**. It matches a us
 - Shipping times and international shipping
 - Account help (password reset)
 - Contacting customer support
+- Payment methods
+- Cancelling an order
+- Damaged or wrong items
+- Discount and coupon codes
 
 ## How it works
 
-1. **FAQ dataset** – customer-support FAQs (returns, shipping, tracking, password reset, contact), each with several question variants.
+1. **FAQ dataset** – customer-support FAQs (returns, shipping, tracking, password reset, contact, payments, cancellation, damaged items, discounts), each with several question variants.
 2. **Preprocessing (NLTK)** – lowercasing, punctuation removal, tokenization, stopword removal and lemmatization.
 3. **Matching** – TF-IDF vectors (unigrams + bigrams) compared with **cosine similarity**.
 4. **Response** – the best-matching answer is shown. If the similarity is below the threshold (`0.25`), a polite fallback message is returned.
@@ -40,6 +44,10 @@ streamlit run app.py
 ```
 
 NLTK data (`punkt`, `stopwords`, `wordnet`) is downloaded automatically on first run.
+
+## Suggested questions
+
+The sidebar lists 10 suggested questions, all of which the bot can answer. Click one to ask it instantly, or type your own question in the chat box.
 
 ## Example questions
 

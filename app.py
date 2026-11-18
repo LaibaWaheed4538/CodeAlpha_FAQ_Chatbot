@@ -35,6 +35,10 @@ SUGGESTED_QUESTIONS = [
     "Do you offer international shipping?",
     "How do I reset my password?",
     "How can I contact customer support?",
+    "What payment methods do you accept?",
+    "How can I cancel my order?",
+    "What if I received a damaged item?",
+    "Do you have any discount codes?",
 ]
 
 # --------------------------------------------------------------------------
@@ -80,6 +84,8 @@ FAQS = [
             "How can I track my order?",
             "Where is my order?",
             "Track my package",
+            "Where is my package?",
+            "Where is my parcel?",
             "Order tracking link",
         ],
         "answer": (
@@ -132,6 +138,57 @@ FAQS = [
         "answer": (
             "You can reach our support team 24/7 via live chat on our website "
             "or by emailing support@example.com."
+        ),
+    },
+    {
+        "questions": [
+            "What payment methods do you accept?",
+            "How can I pay for my order?",
+            "Do you accept PayPal?",
+            "Can I pay with a credit card?",
+        ],
+        "answer": (
+            "We accept Visa, MasterCard, American Express, PayPal and Apple "
+            "Pay. All payments are processed securely at checkout."
+        ),
+    },
+    {
+        "questions": [
+            "How can I cancel my order?",
+            "I want to cancel my order",
+            "Can I cancel after placing an order?",
+            "Cancel my purchase",
+        ],
+        "answer": (
+            "You can cancel your order within 12 hours of placing it from the "
+            "'My Orders' page. Once it has shipped, you can return it instead "
+            "under our return policy."
+        ),
+    },
+    {
+        "questions": [
+            "What if I received a damaged item?",
+            "My item arrived broken",
+            "I received the wrong product",
+            "The product is defective",
+        ],
+        "answer": (
+            "We're sorry about that! Contact our support team within 7 days "
+            "of delivery with your order number and a photo, and we will send "
+            "a replacement or issue a full refund."
+        ),
+    },
+    {
+        "questions": [
+            "Do you have any discount codes?",
+            "How do I use a coupon code?",
+            "Are there any sales or promotions?",
+            "Do you offer discounts?",
+        ],
+        "answer": (
+            "Enter your coupon code in the 'Promo Code' box at checkout. "
+            "Subscribe to our newsletter to get 10% off your first order and "
+            "early access to sales."
         ),
     },
 ]

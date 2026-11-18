@@ -27,6 +27,16 @@ FALLBACK_ANSWER = (
     "question? You can also reach our support team at support@example.com."
 )
 
+# Questions shown in the sidebar so users know what they can ask.
+SUGGESTED_QUESTIONS = [
+    "What is your return policy?",
+    "How can I track my order?",
+    "What are your shipping times?",
+    "Do you offer international shipping?",
+    "How do I reset my password?",
+    "How can I contact customer support?",
+]
+
 # --------------------------------------------------------------------------
 # FAQ DATASET
 # Each FAQ has several question variants so matching is more robust.
@@ -271,6 +281,15 @@ def main():
             "FAQ chatbot built with NLTK preprocessing, TF-IDF and cosine "
             "similarity."
         )
+
+        st.divider()
+        st.subheader("💡 Suggested questions")
+        st.caption("Click a question to ask it, or type your own.")
+        for i, suggestion in enumerate(SUGGESTED_QUESTIONS):
+            if st.button(suggestion, key=f"suggestion_{i}", use_container_width=True):
+                st.session_state.pending_question = suggestion
+
+        st.divider()
         if st.button("Clear chat"):
             st.session_state.pop("messages", None)
             st.rerun()
@@ -290,7 +309,9 @@ def main():
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    user_input = st.chat_input("Type your question here...")
+    typed_input = st.chat_input("Type your question here...")
+    clicked_input = st.session_state.pop("pending_question", None)
+    user_input = typed_input or clicked_input
     if user_input:
         st.session_state.messages.append({"role": "user", "content": user_input})
         with st.chat_message("user"):
